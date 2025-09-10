@@ -1,4 +1,4 @@
-https://blygren.github.io/Them/character_biographies.html
+https://blygren.github.io/Them/characterbiographies.html
 
 
 Them
