@@ -1,4 +1,4 @@
-https://blygren.github.io/Them/characterbiographies.html
+https://CubeGuyTheCreator.github.io/Them/characterbiographies.html
 
 
 Them
