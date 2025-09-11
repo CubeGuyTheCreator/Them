@@ -5,5 +5,5 @@ Them
 /character_biographies.html
 
 
-https://blygren.github.io/Them/CubeJump/WireJump.html
+https://CubeGuyTheCreator.github.io/Them/CubeJump/WireJump.html
 
