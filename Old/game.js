@@ -1,0 +1,410 @@
+// Module aliases
+const { Engine, Render, Runner, Bodies, Composite, Events, Body, Vector } = Matter;
+
+// Create engine
+const engine = Engine.create();
+const world = engine.world;
+engine.world.gravity.y = 1;
+
+// Create renderer
+const render = Render.create({
+    element: document.body,
+    engine: engine,
+    options: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        wireframes: false,
+        background: '#1a1a1a'
+    }
+});
+Render.run(render);
+
+// Create runner
+const runner = Runner.create();
+Runner.run(runner, engine);
+
+// Game variables
+let player;
+const platforms = [];
+const effectParticles = [];
+const keys = { left: false, right: false, up: false, boost: false };
+let upPressedLastFrame = false; // Track up key for jump edge detection
+let playerOnGround = false;
+let highestY = window.innerHeight;
+let score = 0;
+const scoreElement = document.getElementById('score');
+let highScore = localStorage.getItem('highScore') || 0;
+const highScoreElement = document.getElementById('high-score');
+highScoreElement.innerText = `High Score: ${highScore}`;
+const platformWidth = 120;
+const platformHeight = 20;
+const platformGap = 180;
+
+// Touch controls
+let activeTouches = [];
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+// Boost variables
+let boostPower = 100;
+const maxBoostPower = 100;
+const boostRechargeRate = 0.5;
+const boostDepletionRate = 1.5;
+const boostForce = 0.2 * 0.1; // 90% slower boost
+const boostMeter = document.getElementById('boost-meter');
+
+// Create player
+player = Bodies.rectangle(window.innerWidth / 2, window.innerHeight - 100, 40, 40, {
+    friction: 0.01,
+    restitution: 0,
+    density: 0.005,
+    render: { fillStyle: '#f35' },
+    label: 'player'
+});
+Composite.add(world, player);
+
+// Generate initial platforms
+function generatePlatforms(startY, count) {
+    for (let i = 0; i < count; i++) {
+        const y = startY - (i * platformGap);
+        const x = Math.random() * (window.innerWidth - platformWidth);
+        const platform = Bodies.rectangle(x + platformWidth / 2, y, platformWidth, platformHeight, {
+            isStatic: true,
+            render: { fillStyle: '#ddd' },
+            label: 'platform'
+        });
+        platforms.push(platform);
+        Composite.add(world, platform);
+    }
+    highestY = startY - (count * platformGap);
+}
+
+// Ground platform
+const ground = Bodies.rectangle(window.innerWidth / 2, window.innerHeight + 5, window.innerWidth, 20, {
+    isStatic: true,
+    render: { fillStyle: '#ddd' },
+    label: 'platform'
+});
+platforms.push(ground);
+Composite.add(world, ground);
+
+// Initial set of platforms
+generatePlatforms(window.innerHeight - platformGap, 20);
+
+// Player controls - keyboard
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') keys.left = true;
+    if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') keys.right = true;
+    if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') keys.up = true;
+    if (e.key === ' ' || e.code === 'Space') keys.boost = true;
+});
+
+window.addEventListener('keyup', (e) => {
+    if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') keys.left = false;
+    if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') keys.right = false;
+    if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') keys.up = false;
+    if (e.key === ' ' || e.code === 'Space') keys.boost = false;
+});
+
+// Player controls - touch
+if (isTouchDevice) {
+    // Process touch location and update controls
+    function processTouchInput() {
+        // Reset touch controls first
+        keys.left = false;
+        keys.right = false;
+        
+        for (const touch of activeTouches) {
+            const x = touch.clientX;
+            const y = touch.clientY;
+            
+            // Left third of screen = move left
+            if (x < window.innerWidth / 3) {
+                keys.left = true;
+            }
+            // Right third of screen = move right
+            else if (x > window.innerWidth * 2/3) {
+                keys.right = true;
+            }
+            
+            // Top half = jump (on touch start only, handled separately)
+            
+            // Bottom quarter = boost
+            if (y > window.innerHeight * 3/4) {
+                keys.boost = true;
+            }
+        }
+    }
+
+    // Touch event handlers
+    window.addEventListener('touchstart', (e) => {
+        e.preventDefault(); // Prevent default behavior like scrolling
+        
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            activeTouches.push(touch);
+            
+            // Handle jump on touch start in the upper part of the screen
+            if (touch.clientY < window.innerHeight / 2) {
+                keys.up = true;
+                // We'll reset this in the next frame
+                setTimeout(() => { keys.up = false; }, 100);
+            }
+        }
+        
+        processTouchInput();
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        
+        // Update active touches
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            const idx = activeTouches.findIndex(t => t.identifier === touch.identifier);
+            if (idx !== -1) {
+                activeTouches[idx] = touch;
+            }
+        }
+        
+        processTouchInput();
+    }, { passive: false });
+
+    window.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        
+        // Remove ended touches
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            const idx = activeTouches.findIndex(t => t.identifier === touch.identifier);
+            if (idx !== -1) {
+                activeTouches.splice(idx, 1);
+            }
+        }
+        
+        // If no touches remain, reset boost
+        if (activeTouches.length === 0) {
+            keys.boost = false;
+        } else {
+            processTouchInput();
+        }
+    }, { passive: false });
+    
+    // Add touch control instructions
+    const instructions = document.createElement('div');
+    instructions.innerHTML = `
+        <div style="position:fixed; bottom:50px; left:10px; color:white; font-family:sans-serif; z-index:100; background:rgba(0,0,0,0.5); padding:10px; border-radius:5px;">
+            <p>Left side: Move left</p>
+            <p>Right side: Move right</p>
+            <p>Top: Jump</p>
+            <p>Bottom: Boost</p>
+        </div>
+    `;
+    document.body.appendChild(instructions);
+    
+    // Hide instructions after 10 seconds
+    setTimeout(() => {
+        instructions.style.opacity = '0';
+        instructions.style.transition = 'opacity 1s';
+        setTimeout(() => instructions.remove(), 1000);
+    }, 10000);
+}
+
+// Collision detection for ground status
+function checkGround(pairs) {
+    for (const pair of pairs) {
+        const { bodyA, bodyB } = pair;
+        if (bodyA.label === 'player' || bodyB.label === 'player') {
+            const platform = bodyA.label === 'platform' ? bodyA : (bodyB.label === 'platform' ? bodyB : null);
+            if (platform) {
+                // Check if player is on top of the platform
+                if (Math.abs(player.position.y - platform.position.y) < (40 / 2 + platformHeight / 2 + 5) && player.velocity.y >= 0) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// Collision detection for effects
+Events.on(engine, 'collisionStart', (event) => {
+    const pairs = event.pairs;
+    for (const pair of pairs) {
+        const { bodyA, bodyB } = pair;
+        if ((bodyA.label === 'player' && bodyB.label === 'platform') || (bodyB.label === 'player' && bodyA.label === 'platform')) {
+            const platform = bodyA.label === 'platform' ? bodyA : bodyB;
+            // Smash effect on hard landing
+            if (player.velocity.y > 10) {
+                const particleCount = 20; // Doubled from 10 to 20
+                for (let i = 0; i < particleCount; i++) {
+                    // Player smash particles
+                    const x = player.position.x + (Math.random() - 0.5) * 40;
+                    const y = player.position.y + 20;
+                    const particle = Bodies.rectangle(x, y, 5 + Math.random() * 5, 5 + Math.random() * 5, {
+                        friction: 0.1,
+                        restitution: 0.5,
+                        render: { fillStyle: '#ccc' },
+                        label: 'effect'
+                    });
+                    Body.setVelocity(particle, {
+                        x: (Math.random() - 0.5) * 10,
+                        y: -Math.random() * 5
+                    });
+                    effectParticles.push(particle);
+                    Composite.add(world, particle);
+
+                    // Platform shatter particles
+                    const shatterX = player.position.x + (Math.random() - 0.5) * platform.bounds.max.x - platform.bounds.min.x;
+                    const shatterY = platform.position.y - platformHeight / 2;
+                    const shatterParticle = Bodies.rectangle(shatterX, shatterY, 3 + Math.random() * 3, 3 + Math.random() * 3, {
+                        friction: 0.05,
+                        restitution: 0.1,
+                        render: { fillStyle: '#ddd' },
+                        label: 'effect'
+                    });
+                    Body.setVelocity(shatterParticle, {
+                        x: (Math.random() - 0.5) * 3,
+                        y: -Math.random() * 2
+                    });
+                    effectParticles.push(shatterParticle);
+                    Composite.add(world, shatterParticle);
+                }
+            }
+        }
+    }
+});
+
+// Game loop
+Events.on(engine, 'beforeUpdate', () => {
+    playerOnGround = checkGround(engine.pairs.list.filter(p => p.isActive));
+
+    // Player movement
+    const velocity = player.velocity;
+    let newVelocityX = 0;
+    if (keys.left) newVelocityX = -5;
+    if (keys.right) newVelocityX = 5;
+    
+    Body.setVelocity(player, { x: newVelocityX, y: velocity.y });
+
+    // Jump only on up key press (not hold), and not if using boost
+    if (keys.up && playerOnGround && !upPressedLastFrame) {
+        Body.applyForce(player, player.position, { x: 0, y: -1.1 * 0.4 * 1.2 });
+    }
+    upPressedLastFrame = keys.up;
+
+    // Boost logic: only boost if not on ground
+    if (keys.boost && boostPower > 0 && !playerOnGround) {
+        Body.applyForce(player, player.position, { x: 0, y: -boostForce });
+        boostPower -= boostDepletionRate;
+        
+        // Boost particles
+        for (let i = 0; i < 2; i++) {
+            const x = player.position.x + (Math.random() - 0.5) * 30;
+            const y = player.position.y + 20 + Math.random() * 5;
+            const boostParticle = Bodies.rectangle(x, y, 3, 10 + Math.random() * 10, {
+                isSensor: true,
+                render: { fillStyle: 'rgba(77, 255, 255, 0.7)' },
+                label: 'effect'
+            });
+            Body.setVelocity(boostParticle, { x: (Math.random() - 0.5) * 1, y: Math.random() * 2 + 2 });
+            effectParticles.push(boostParticle);
+            Composite.add(world, boostParticle);
+        }
+    } else if (boostPower < maxBoostPower) {
+        // Recharge boost when not boosting
+        boostPower = Math.min(boostPower + boostRechargeRate, maxBoostPower);
+    }
+    
+    // Update boost meter display
+    boostMeter.style.width = `${(boostPower / maxBoostPower) * 100}%`;
+
+    // Wind effects when falling
+    if (player.velocity.y > 5) { // Add wind effect when falling fast
+        const particleCount = Math.floor(player.velocity.y / 10);
+        for (let i = 0; i < particleCount; i++) {
+            const x = player.position.x + (Math.random() - 0.5) * 40;
+            const y = player.position.y + 20 + Math.random() * 20;
+            const windParticle = Bodies.rectangle(x, y, 2, 10 + Math.random() * 10, {
+                isSensor: true,
+                render: { fillStyle: 'rgba(255, 255, 255, 0.5)' },
+                label: 'effect'
+            });
+            Body.setVelocity(windParticle, { x: (Math.random() - 0.5) * 2, y: -player.velocity.y * (Math.random() * 0.2 + 0.2) });
+            effectParticles.push(windParticle);
+            Composite.add(world, windParticle);
+        }
+    }
+
+    // Wind effects when jumping
+    if (player.velocity.y < -5) { // Add wind effect when jumping fast
+        const particleCount = Math.floor(-player.velocity.y / 5);
+        for (let i = 0; i < particleCount; i++) {
+            const x = player.position.x + (Math.random() - 0.5) * 40;
+            const y = player.position.y - 20 - Math.random() * 20;
+            const jumpParticle = Bodies.rectangle(x, y, 2, 10 + Math.random() * 10, {
+                isSensor: true,
+                render: { fillStyle: 'rgba(255, 255, 255, 0.4)' },
+                label: 'effect'
+            });
+            Body.setVelocity(jumpParticle, { x: (Math.random() - 0.5) * 2, y: -player.velocity.y * (Math.random() * 0.1 + 0.1) });
+            effectParticles.push(jumpParticle);
+            Composite.add(world, jumpParticle);
+        }
+    }
+
+    // Update and remove effect particles
+    for (let i = effectParticles.length - 1; i >= 0; i--) {
+        const particle = effectParticles[i];
+        if (!particle.render.opacity) particle.render.opacity = 1;
+        
+        if (particle.isSensor) { // Wind/jump particles
+            particle.render.opacity -= 0.02;
+        } else { // Smash/shatter particles
+            particle.render.opacity -= 0.004; // Reduced from 0.01 to make particles last ~3 seconds longer
+        }
+
+        if (particle.render.opacity <= 0 || particle.position.y > player.position.y + window.innerHeight) {
+            Composite.remove(world, particle);
+            effectParticles.splice(i, 1);
+        }
+    }
+
+    // Camera follow
+    const cameraY = player.position.y - window.innerHeight / 2;
+    Render.lookAt(render, {
+        min: { x: 0, y: cameraY },
+        max: { x: window.innerWidth, y: cameraY + window.innerHeight }
+    });
+
+    // Infinite generation
+    if (player.position.y < highestY + window.innerHeight) {
+        generatePlatforms(highestY, 20);
+    }
+    
+    // Player wrap around screen
+    if (player.position.x > window.innerWidth + 20) {
+        Body.setPosition(player, { x: -20, y: player.position.y });
+    } else if (player.position.x < -20) {
+        Body.setPosition(player, { x: window.innerWidth + 20, y: player.position.y });
+    }
+
+    // Update score
+    score = Math.floor((window.innerHeight - 100 - player.position.y) / 10);
+    if (score < 0) score = 0; // Prevent score from going negative
+    scoreElement.innerText = `Score: ${score}`;
+
+    if (score > highScore) {
+        highScore = score;
+        highScoreElement.innerText = `High Score: ${highScore}`;
+        localStorage.setItem('highScore', highScore);
+    }
+});
+
+// Handle window resize
+window.addEventListener('resize', () => {
+    render.canvas.width = window.innerWidth;
+    render.canvas.height = window.innerHeight;
+    render.options.width = window.innerWidth;
+    render.options.height = window.innerHeight;
+    Body.setPosition(ground, {x: window.innerWidth / 2, y: window.innerHeight + 5});
+});
