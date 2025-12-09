@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>World database</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e27;
+            color: #fff;
+            overflow: hidden;
+        }
+        
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            background: rgba(20, 25, 45, 0.95);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        #controls h1 {
+            font-size: 24px;
+            margin-bottom: 15px;
+            color: #4a9eff;
+        }
+        
+        #controls input {
+            width: 300px;
+            padding: 10px;
+            border: 2px solid #4a9eff;
+            border-radius: 5px;
+            background: #0a0e27;
+            color: #fff;
+            font-size: 14px;
+        }
+        
+        #controls button {
+            padding: 10px 20px;
+            margin-left: 10px;
+            background: #4a9eff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        #controls button:hover {
+            background: #3a8eef;
+        }
+        
+        #viewControls {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(74, 158, 255, 0.3);
+        }
+        
+        #viewControls button {
+            margin: 5px 5px 5px 0;
+            padding: 8px 15px;
+            font-size: 12px;
+        }
+        
+        #history {
+            margin-top: 10px;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+        
+        .historyItem {
+            padding: 5px 10px;
+            margin: 5px 0;
+            background: rgba(74, 158, 255, 0.1);
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.3s;
+        }
+        
+        .historyItem:hover {
+            background: rgba(74, 158, 255, 0.3);
+        }
+        
+        #summaryPanel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 400px;
+            max-height: 80vh;
+            background: rgba(20, 25, 45, 0.95);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            overflow-y: auto;
+            display: none;
+            z-index: 10;
+        }
+        
+        #summaryPanel h2 {
+            color: #4a9eff;
+            margin-bottom: 10px;
+            font-size: 22px;
+        }
+        
+        #summaryPanel .close {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 24px;
+            cursor: pointer;
+            color: #aaa;
+            transition: color 0.3s;
+        }
+        
+        #summaryPanel .close:hover {
+            color: #fff;
+        }
+        
+        #summaryContent {
+            line-height: 1.6;
+            color: #ddd;
+        }
+        
+        #summaryImage {
+            width: 100%;
+            border-radius: 8px;
+            margin: 15px 0;
+            display: none;
+        }
+        
+        #summaryExtract {
+            margin-bottom: 15px;
+        }
+        
+        .wikiLink {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 8px 15px;
+            background: #4a9eff;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+        
+        .wikiLink:hover {
+            background: #3a8eef;
+        }
+        
+        #stats {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 14px;
+            color: #aaa;
+        }
+        
+        #info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(20, 25, 45, 0.95);
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 350px;
+        }
+        
+        #info h3 {
+            color: #4a9eff;
+            margin-bottom: 10px;
+        }
+        
+        #canvas {
+            display: block;
+            cursor: grab;
+        }
+        
+        #canvas:active {
+            cursor: grabbing;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: #4a9eff;
+            display: none;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(74, 158, 255, 0.3);
+            border-top-color: #4a9eff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(10, 14, 39, 0.5);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #4a9eff;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3a8eef;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <h1>World Database</h1>
+        <input type="text" id="searchInput" placeholder="Enter a Wikipedia article (e.g., 'Albert Einstein')" value="Albert Einstein">
+        <button onclick="startVisualization()">Visualize</button>
+        <p style="margin-top: 10px; font-size: 12px; color: #aaa;">Click on nodes to expand and see summary</p>
+        
+        <div id="viewControls">
+            <button onclick="resetView()"> Reset View</button>
+            <button onclick="centerGraph()"> Center</button>
+            <button onclick="clearGraph()"> Clear</button>
+        </div>
+        
+        <div id="history"></div>
+    </div>
+    
+    <div id="summaryPanel">
+        <span class="close" onclick="closeSummary()">&times;</span>
+        <div id="summaryContent">
+            <h2 id="summaryTitle"></h2>
+            <img id="summaryImage" alt="Article image">
+            <p id="summaryExtract"></p>
+            <a id="summaryLink" class="wikiLink" target="_blank">Read Full Article on Wikipedia</a>
+            <div id="stats"></div>
+        </div>
+    </div>
+    
+   
+    <div id="loading"><span class="spinner"></span>Loading connections...</div>
+    
+    <canvas id="canvas"></canvas>
+    
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const loadingEl = document.getElementById('loading');
+        const summaryPanel = document.getElementById('summaryPanel');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        let nodes = [];
+        let edges = [];
+        let selectedNode = null;
+        let isDragging = false;
+        let dragNode = null;
+        let offsetX = 0, offsetY = 0;
+        let scale = 1;
+        let panX = 0, panY = 0;
+        let isPanning = false;
+        let lastMouseX = 0, lastMouseY = 0;
+        let searchHistory = [];
+        let animationId = null;
+        
+        class Node {
+            constructor(title, x, y, isRoot = false) {
+                this.title = title;
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.radius = isRoot ? 25 : 15;
+                this.color = isRoot ? '#4a9eff' : '#ff6b6b';
+                this.isRoot = isRoot;
+                this.expanded = false;
+            }
+        }
+        
+        async function fetchWikipediaLinks(title, limit = 10) {
+            try {
+                const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=links&pllimit=${limit}&format=json&origin=*`;
+                const response = await fetch(url);
+                const data = await response.json();
+                const pages = data.query.pages;
+                const pageId = Object.keys(pages)[0];
+                
+                if (pageId === '-1') return [];
+                
+                const links = pages[pageId].links || [];
+                return links.map(link => link.title);
+            } catch (error) {
+                console.error('Error fetching Wikipedia links:', error);
+                return [];
+            }
+        }
+        
+        async function fetchWikipediaSummary(title) {
+            try {
+                const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('Error fetching Wikipedia summary:', error);
+                return null;
+            }
+        }
+        
+        async function startVisualization() {
+            const searchInput = document.getElementById('searchInput').value.trim();
+            if (!searchInput) return;
+            
+            nodes = [];
+            edges = [];
+            panX = 0;
+            panY = 0;
+            scale = 1;
+            loadingEl.style.display = 'block';
+            
+            if (!searchHistory.includes(searchInput)) {
+                searchHistory.unshift(searchInput);
+                if (searchHistory.length > 5) searchHistory.pop();
+                updateHistory();
+            }
+            
+            const rootNode = new Node(searchInput, canvas.width / 2, canvas.height / 2, true);
+            nodes.push(rootNode);
+            
+            const links = await fetchWikipediaLinks(searchInput, 15);
+            
+            links.forEach((link, i) => {
+                const angle = (i / links.length) * Math.PI * 2;
+                const distance = 200;
+                const x = rootNode.x + Math.cos(angle) * distance;
+                const y = rootNode.y + Math.sin(angle) * distance;
+                const node = new Node(link, x, y);
+                nodes.push(node);
+                edges.push({ from: rootNode, to: node });
+            });
+            
+            rootNode.expanded = true;
+            loadingEl.style.display = 'none';
+            
+            if (animationId) cancelAnimationFrame(animationId);
+            animate();
+        }
+        
+        async function expandNode(node) {
+            if (node.expanded) return;
+            
+            loadingEl.style.display = 'block';
+            const links = await fetchWikipediaLinks(node.title, 8);
+            
+            links.forEach((link, i) => {
+                if (nodes.find(n => n.title === link)) return;
+                
+                const angle = (i / links.length) * Math.PI * 2;
+                const distance = 150;
+                const x = node.x + Math.cos(angle) * distance;
+                const y = node.y + Math.sin(angle) * distance;
+                const newNode = new Node(link, x, y);
+                nodes.push(newNode);
+                edges.push({ from: node, to: newNode });
+            });
+            
+            node.expanded = true;
+            loadingEl.style.display = 'none';
+        }
+        
+        async function showSummary(node) {
+            loadingEl.style.display = 'block';
+            const summary = await fetchWikipediaSummary(node.title);
+            loadingEl.style.display = 'none';
+            
+            if (summary) {
+                document.getElementById('summaryTitle').textContent = summary.title;
+                document.getElementById('summaryExtract').textContent = summary.extract || 'No summary available.';
+                document.getElementById('summaryLink').href = summary.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(node.title)}`;
+                
+                const img = document.getElementById('summaryImage');
+                if (summary.thumbnail?.source) {
+                    img.src = summary.thumbnail.source;
+                    img.style.display = 'block';
+                } else {
+                    img.style.display = 'none';
+                }
+                
+                const connections = edges.filter(e => e.from === node || e.to === node).length;
+                document.getElementById('stats').innerHTML = `
+                    <strong>Connections:</strong> ${connections}<br>
+                    <strong>Total Nodes:</strong> ${nodes.length}<br>
+                    <strong>Total Edges:</strong> ${edges.length}
+                `;
+                
+                summaryPanel.style.display = 'block';
+            }
+        }
+        
+        function closeSummary() {
+            summaryPanel.style.display = 'none';
+        }
+        
+        function updateHistory() {
+            const historyEl = document.getElementById('history');
+            historyEl.innerHTML = searchHistory.map(item => 
+                `<div class="historyItem" onclick="loadFromHistory('${item}')">${item}</div>`
+            ).join('');
+        }
+        
+        function loadFromHistory(title) {
+            document.getElementById('searchInput').value = title;
+            startVisualization();
+        }
+        
+        function resetView() {
+            panX = 0;
+            panY = 0;
+            scale = 1;
+        }
+        
+        function centerGraph() {
+            if (nodes.length === 0) return;
+            
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+            
+            nodes.forEach(node => {
+                minX = Math.min(minX, node.x);
+                maxX = Math.max(maxX, node.x);
+                minY = Math.min(minY, node.y);
+                maxY = Math.max(maxY, node.y);
+            });
+            
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+            
+            panX = canvas.width / 2 - centerX;
+            panY = canvas.height / 2 - centerY;
+        }
+        
+        function clearGraph() {
+            nodes = [];
+            edges = [];
+            selectedNode = null;
+            closeSummary();
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        function applyForces() {
+            // Spring force for edges
+            edges.forEach(edge => {
+                const dx = edge.to.x - edge.from.x;
+                const dy = edge.to.y - edge.from.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const force = (distance - 100) * 0.01;
+                
+                const fx = (dx / distance) * force;
+                const fy = (dy / distance) * force;
+                
+                edge.from.vx += fx;
+                edge.from.vy += fy;
+                edge.to.vx -= fx;
+                edge.to.vy -= fy;
+            });
+            
+            // Repulsion force between nodes
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    const dx = nodes[j].x - nodes[i].x;
+                    const dy = nodes[j].y - nodes[i].y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < 150 && distance > 0) {
+                        const force = 500 / (distance * distance);
+                        const fx = (dx / distance) * force;
+                        const fy = (dy / distance) * force;
+                        
+                        nodes[i].vx -= fx;
+                        nodes[i].vy -= fy;
+                        nodes[j].vx += fx;
+                        nodes[j].vy += fy;
+                    }
+                }
+            }
+            
+            // Apply velocity and damping
+            nodes.forEach(node => {
+                if (node !== dragNode) {
+                    node.x += node.vx;
+                    node.y += node.vy;
+                    node.vx *= 0.9;
+                    node.vy *= 0.9;
+                }
+            });
+        }
+        
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.save();
+            ctx.translate(panX, panY);
+            ctx.scale(scale, scale);
+            
+            // Draw edges
+            ctx.strokeStyle = 'rgba(74, 158, 255, 0.3)';
+            ctx.lineWidth = 2 / scale;
+            edges.forEach(edge => {
+                ctx.beginPath();
+                ctx.moveTo(edge.from.x, edge.from.y);
+                ctx.lineTo(edge.to.x, edge.to.y);
+                ctx.stroke();
+            });
+            
+            // Draw nodes
+            nodes.forEach(node => {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+                ctx.fillStyle = node === selectedNode ? '#ffd93d' : node.color;
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2 / scale;
+                ctx.stroke();
+                
+                // Draw text
+                ctx.fillStyle = '#fff';
+                ctx.font = node.isRoot ? `bold ${14 / scale}px sans-serif` : `${12 / scale}px sans-serif`;
+                ctx.textAlign = 'center';
+                const text = node.title.length > 25 ? node.title.substring(0, 25) + '...' : node.title;
+                ctx.fillText(text, node.x, node.y + node.radius + 15 / scale);
+            });
+            
+            ctx.restore();
+        }
+        
+        function animate() {
+            applyForces();
+            draw();
+            animationId = requestAnimationFrame(animate);
+        }
+        
+        function screenToWorld(screenX, screenY) {
+            return {
+                x: (screenX - panX) / scale,
+                y: (screenY - panY) / scale
+            };
+        }
+        
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const worldPos = screenToWorld(mouseX, mouseY);
+            
+            let nodeClicked = false;
+            for (let node of nodes) {
+                const dx = worldPos.x - node.x;
+                const dy = worldPos.y - node.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < node.radius) {
+                    dragNode = node;
+                    offsetX = dx;
+                    offsetY = dy;
+                    isDragging = true;
+                    nodeClicked = true;
+                    break;
+                }
+            }
+            
+            if (!nodeClicked) {
+                isPanning = true;
+                lastMouseX = mouseX;
+                lastMouseY = mouseY;
+            }
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            if (isDragging && dragNode) {
+                const worldPos = screenToWorld(mouseX, mouseY);
+                dragNode.x = worldPos.x - offsetX;
+                dragNode.y = worldPos.y - offsetY;
+                dragNode.vx = 0;
+                dragNode.vy = 0;
+            } else if (isPanning) {
+                const dx = mouseX - lastMouseX;
+                const dy = mouseY - lastMouseY;
+                panX += dx;
+                panY += dy;
+                lastMouseX = mouseX;
+                lastMouseY = mouseY;
+            }
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+            isPanning = false;
+            dragNode = null;
+        });
+        
+        canvas.addEventListener('click', async (e) => {
+            if (isDragging || isPanning) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const worldPos = screenToWorld(mouseX, mouseY);
+            
+            for (let node of nodes) {
+                const dx = worldPos.x - node.x;
+                const dy = worldPos.y - node.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < node.radius) {
+                    selectedNode = node;
+                    await showSummary(node);
+                    
+                    if (!node.expanded) {
+                        await expandNode(node);
+                    }
+                    return;
+                }
+            }
+            
+            selectedNode = null;
+            closeSummary();
+        });
+        
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            const worldBefore = screenToWorld(mouseX, mouseY);
+            
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            scale *= zoomFactor;
+            scale = Math.max(0.1, Math.min(scale, 3));
+            
+            const worldAfter = screenToWorld(mouseX, mouseY);
+            
+            panX += (worldAfter.x - worldBefore.x) * scale;
+            panY += (worldAfter.y - worldBefore.y) * scale;
+        }, { passive: false });
+        
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+        
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                startVisualization();
+            }
+        });
+    </script>
+</body>
+</html>
